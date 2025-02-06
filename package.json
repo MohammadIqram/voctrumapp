@@ -1,0 +1,56 @@
+{
+  "name": "voctrumemployeeapp",
+  "version": "1.0.0",
+  "description": "voctrum employee desktop application",
+  "main": "index.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "asar": true,
+    "appId": "com.voctrum.employees",
+    "productName": "EmployeeManagement",
+    "files": [
+      "index.js",
+      "preload.js",
+      "components/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "setup"
+    },
+    "mac": {
+      "category": "com.voctrum.employees",
+      "icon": "assets/logo.png"
+    },
+    "win": {
+      "icon": "assets/logo.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Voctrum-${version}-${arch}.exe",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "icon": "assets/logo.png",
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ]
+    }
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^34.0.1",
+    "electron-builder": "^25.1.8"
+  }
+}
