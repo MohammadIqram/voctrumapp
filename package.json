@@ -52,5 +52,8 @@
   "devDependencies": {
     "electron": "^34.0.1",
     "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
   }
 }
