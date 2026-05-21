@@ -1,11 +1,11 @@
-const { app, BrowserWindow, dialog, ipcMain, screen } = require('electron');
+// main.js code
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const setupIpcHandlers = require('./components/mouseUtil');
 const { enableAutoLaunch } = require('./components/autoLaunch');
 const { autoUpdater } = require('electron-updater');
 
 let win = null;
-let updateToastWin = null;
 
 autoUpdater.autoDownload = false;
 autoUpdater.forceDevUpdateConfig = true; 
@@ -14,7 +14,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 800,
     height: 600,
-    show: true,
+    show: false,             
+    backgroundColor: '#ffffff', 
     icon: path.join(__dirname, 'assets/logo.png'),
     webPreferences: {
       nodeIntegration: false,
@@ -30,12 +31,13 @@ function createWindow() {
   win.loadURL('https://employees.voctrum.com');
 
   win.once('ready-to-show', () => {
-    setTimeout(triggerUpdateCheck, 1500); 
+    win.show();
+    // 1. App loads instantly. We kick off the update check completely in parallel.
+    triggerUpdateCheck(); 
   });
 
   win.on('closed', () => { 
     win = null; 
-    if (updateToastWin) updateToastWin.close();
   });
 }
 
@@ -53,7 +55,8 @@ app.whenReady().then(() => {
 
 async function triggerUpdateCheck() {
   try {
-    console.log('Pinging GitHub for update manifest...');
+    console.log('Pinging GitHub for update manifest in background...');
+    // This runs completely asynchronously and does not freeze the app
     await autoUpdater.checkForUpdates();
   } catch (error) {
     console.error('Update check failed, allowing session fallback:', error);
@@ -65,49 +68,28 @@ ipcMain.handle('check-mandatory-update', async () => {
   await triggerUpdateCheck();
 });
 
-ipcMain.on('start-update-download', () => {
-  autoUpdater.downloadUpdate();
-});
-
 // Auto-Updater Management
 autoUpdater.on('update-available', (info) => {
-  if (updateToastWin) return;
+  const versionStr = info.version ? ` (v${info.version})` : '';
+  
+  // OPTION A: If you still want a dialog, wait for the app to be idle, or use a custom IPC event.
+  // OPTION B (Recommended): Send an event to Next.js so it can show a nice, quiet "Update Available" banner.
+  // win.webContents.send('update-available-ui', info.version);
 
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
-
-  const toastWidth = 360;
-  const toastHeight = 160;
-  const padding = 20;
-
-  updateToastWin = new BrowserWindow({
-    width: toastWidth,
-    height: toastHeight,
-    x: width - toastWidth - padding,
-    y: height - toastHeight - padding,
-    frame: false,
-    resizable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    show: false, // Prevent white flash lag
-    webPreferences: {
-      nodeIntegration: true, 
-      contextIsolation: false
+  dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: ['Update Now', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Update Available',
+    message: `A new version of Voctrum WorkHub${versionStr} is available.`,
+    detail: 'Would you like to download and install it now?'
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate();
     }
-  });
-
-  // OPTIMIZATION: Load static file instead of a massive URI string data URL
-  const version = info.version || '';
-  updateToastWin.loadFile(path.join(__dirname, 'toast.html'), {
-    search: `v=${version}`
-  });
-
-  updateToastWin.once('ready-to-show', () => {
-    updateToastWin.show();
-  });
-
-  updateToastWin.on('closed', () => {
-    updateToastWin = null;
+  }).catch(err => {
+    console.error('Update dialog error:', err);
   });
 });
 
@@ -119,16 +101,15 @@ autoUpdater.on('error', (err) => {
   console.error('AutoUpdater Error:', err);
 });
 
+// Download happens asynchronously in the background. Once finished, we ask to restart.
 autoUpdater.on('update-downloaded', () => {
-  if (updateToastWin) {
-    updateToastWin.close();
-  }
-
   dialog.showMessageBox(win, {
     type: 'info',
+    buttons: ['Restart Now'],
+    defaultId: 0,
     title: 'Install Update',
-    message: 'The download is complete. The app will restart now to apply changes.',
-    buttons: ['Restart Now']
+    message: 'The download is complete.',
+    detail: 'The app will restart now to apply changes.'
   }).then(() => {
     setImmediate(() => {
       autoUpdater.quitAndInstall();
