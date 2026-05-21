@@ -1,11 +1,10 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron'); // Added ipcMain
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const setupIpcHandlers = require('./components/mouseUtil');
 const { enableAutoLaunch } = require('./components/autoLaunch');
 const { autoUpdater } = require('electron-updater');
 
 let win;
-// CRITICAL: Keep autoDownload false so we control the user flow manually
 autoUpdater.autoDownload = false;
 
 function createWindow() {
@@ -21,12 +20,11 @@ function createWindow() {
     }
   });
 
-  // inject custom user agent
   const defaultUserAgent = win.webContents.getUserAgent();
   const customUserAgent = `${defaultUserAgent} VoctrumWorkhub/${app.getVersion()}`;
   win.webContents.setUserAgent(customUserAgent);
 
-  win.loadURL('http://localhost:3000');
+  win.loadURL('https://employees.voctrum.com');
   win.on('closed', () => { win = null; });
 }
 
@@ -46,13 +44,10 @@ ipcMain.handle('check-mandatory-update', async () => {
     await autoUpdater.checkForUpdates();
   } catch (error) {
     console.error('Update check failed, allowing session fallback:', error);
-    win.webContents.send('update-status', { available: false }); 
   }
 });
 
 autoUpdater.on('update-available', () => {
-  win.webContents.send('update-status', { available: true });
-
   dialog.showMessageBox(win, {
     type: 'warning',
     title: 'Mandatory Update Required',
