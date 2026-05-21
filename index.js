@@ -4,7 +4,7 @@ const setupIpcHandlers = require('./components/mouseUtil');
 const { enableAutoLaunch } = require('./components/autoLaunch');
 const { autoUpdater } = require('electron-updater');
 
-let win;
+let win = null;
 let updateToastWin = null;
 
 autoUpdater.autoDownload = false;
@@ -20,22 +20,17 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      devTools: !app.isPackaged
     }
   });
-
-  if (app.isPackaged) {
-    const { Menu } = require('electron');
-    Menu.setApplicationMenu(null);
-  }
 
   const defaultUserAgent = win.webContents.getUserAgent();
   const customUserAgent = `${defaultUserAgent} VoctrumWorkhub/${app.getVersion()}`;
   win.webContents.setUserAgent(customUserAgent);
 
-  win.loadURL('http://employees.voctrum.app');
-  win.webContents.on('did-finish-load', () => {
-    triggerUpdateCheck();
+  win.loadURL('https://employees.voctrum.com');
+
+  win.once('ready-to-show', () => {
+    setTimeout(triggerUpdateCheck, 1500); 
   });
 
   win.on('closed', () => { 
@@ -44,6 +39,7 @@ function createWindow() {
   });
 }
 
+// Initialize system utilities
 setupIpcHandlers();
 
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -64,6 +60,7 @@ async function triggerUpdateCheck() {
   }
 }
 
+// IPC Interfaces
 ipcMain.handle('check-mandatory-update', async () => {
   await triggerUpdateCheck();
 });
@@ -72,6 +69,7 @@ ipcMain.on('start-update-download', () => {
   autoUpdater.downloadUpdate();
 });
 
+// Auto-Updater Management
 autoUpdater.on('update-available', (info) => {
   if (updateToastWin) return;
 
@@ -82,114 +80,27 @@ autoUpdater.on('update-available', (info) => {
   const toastHeight = 160;
   const padding = 20;
 
-  const x = width - toastWidth - padding;
-  const y = height - toastHeight - padding;
-
   updateToastWin = new BrowserWindow({
     width: toastWidth,
     height: toastHeight,
-    x: x,
-    y: y,
+    x: width - toastWidth - padding,
+    y: height - toastHeight - padding,
     frame: false,
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    show: false,
+    show: false, // Prevent white flash lag
     webPreferences: {
-      nodeIntegration: true,
+      nodeIntegration: true, 
       contextIsolation: false
     }
   });
 
-  const versionStr = info.version || '';
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body {
-          margin: 0;
-          padding: 16px;
-          background-color: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-left: 6px solid #2563eb;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          height: 100vh;
-          box-sizing: border-box;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          overflow: hidden;
-        }
-        .title {
-          font-size: 14px;
-          font-weight: 600;
-          color: #1e293b;
-          margin: 0 0 4px 0;
-        }
-        .desc {
-          font-size: 12px;
-          color: #64748b;
-          margin: 0;
-          line-height: 1.4;
-        }
-        .actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-        }
-        button {
-          font-size: 11px;
-          font-weight: 500;
-          padding: 6px 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          border: none;
-          transition: background 0.2s ease;
-        }
-        .btn-dismiss {
-          background-color: #f1f5f9;
-          color: #475569;
-        }
-        .btn-dismiss:hover {
-          background-color: #e2e8f0;
-        }
-        .btn-update {
-          background-color: #2563eb;
-          color: white;
-        }
-        .btn-update:hover {
-          background-color: #1d4ed8;
-        }
-      </style>
-    </head>
-    <body>
-      <div>
-        <div class="title">✨ Update Available ${versionStr ? `(v${versionStr})` : ''}</div>
-        <p class="desc">A new version of Voctrum WorkHub is ready. Update now for the latest features and stability fixes.</p>
-      </div>
-      <div class="actions">
-        <button class="btn-dismiss" onclick="window.close()">Dismiss</button>
-        <button class="btn-update" id="updateBtn">Update Now</button>
-      </div>
-      <script>
-        const { ipcRenderer } = require('electron');
-        document.getElementById('updateBtn').addEventListener('click', () => {
-          document.body.innerHTML = \`
-            <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;">
-              <div class="title" style="margin-bottom: 4px;">Downloading Update...</div>
-              <p class="desc">Downloading assets in the background.</p>
-            </div>
-          \`;
-          ipcRenderer.send('start-update-download');
-        });
-      </script>
-    </body>
-    </html>
-  `;
-
-  updateToastWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+  // OPTIMIZATION: Load static file instead of a massive URI string data URL
+  const version = info.version || '';
+  updateToastWin.loadFile(path.join(__dirname, 'toast.html'), {
+    search: `v=${version}`
+  });
 
   updateToastWin.once('ready-to-show', () => {
     updateToastWin.show();
@@ -209,12 +120,10 @@ autoUpdater.on('error', (err) => {
 });
 
 autoUpdater.on('update-downloaded', () => {
-  // Safely close the notification banner if it is still open
   if (updateToastWin) {
     updateToastWin.close();
   }
 
-  // Final native confirmation dialog ensuring explicit approval before a mid-session restart
   dialog.showMessageBox(win, {
     type: 'info',
     title: 'Install Update',
