@@ -1,7 +1,7 @@
 {
-  "name": "voctrumemployeeapp",
-  "version": "1.0.0",
-  "description": "voctrum employee desktop application",
+  "name": "voctrum",
+  "version": "2.0.0",
+  "description": "Voctrum workspace employee portal.",
   "main": "index.js",
   "scripts": {
     "start": "electron .",
@@ -11,12 +11,25 @@
   "build": {
     "asar": true,
     "appId": "com.voctrum.employees",
-    "productName": "EmployeeManagement",
+    "productName": "Voctrum Workspace",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "MohammadIqram",
+        "repo": "voctrumapp"
+      }
+    ],
     "files": [
       "index.js",
       "preload.js",
       "components/**/*",
-      "package.json"
+      "assets/logo.png",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG,README,readme,README.md,test,tests,Examples,examples}*",
+      "!**/*.map",
+      "!.git/**/*",
+      "!.vscode/**/*",
+      "!setup/**/*"
     ],
     "directories": {
       "output": "setup"
@@ -54,6 +67,6 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "electron-updater": "^6.8.3"
   }
 }

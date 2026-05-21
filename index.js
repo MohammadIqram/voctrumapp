@@ -1,75 +1,79 @@
-const { app, BrowserWindow, desktopCapturer, screen } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron'); // Added ipcMain
 const path = require('path');
 const setupIpcHandlers = require('./components/mouseUtil');
-const fs = require('fs');
+const { enableAutoLaunch } = require('./components/autoLaunch');
+const { autoUpdater } = require('electron-updater');
 
 let win;
+// CRITICAL: Keep autoDownload false so we control the user flow manually
+autoUpdater.autoDownload = false;
 
-// Function to create the Electron window
 function createWindow() {
   win = new BrowserWindow({
     width: 800,
     height: 600,
     show: true,
-    icon: path.join(__dirname, 'assets/logo2.png'),
+    icon: path.join(__dirname, 'assets/logo.png'),
     webPreferences: {
-      nodeIntegration: false, // Disable node integration for security reasons
-      contextIsolation: true, // Isolate the context
-      preload: path.join(__dirname, 'preload.js') // Preload script
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
+
+  // inject custom user agent
+  const defaultUserAgent = win.webContents.getUserAgent();
+  const customUserAgent = `${defaultUserAgent} VoctrumWorkhub/${app.getVersion()}`;
+  win.webContents.setUserAgent(customUserAgent);
 
   win.loadURL('http://localhost:3000');
-  // win.loadURL('https://employees.voctrum.com');
-  // win.loadFile(path.join(app.getAppPath(), '/build/index.html'));
-  // Listen for window closed event
-  win.on('closed', () => {
-    win = null;
-  });
-
-  // win.on('close', (e) => {
-  //   e.preventDefault();
-  // });
+  win.on('closed', () => { win = null; });
 }
 
-// IPC handler to get mouse position when requested by the renderer
 setupIpcHandlers();
 
-// When the app is ready, create the window
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
+
 app.whenReady().then(() => {
   createWindow();
-
-  setInterval(async () => {
-    try {
-      const imageBuffer = await captureScreen();
-      if (imageBuffer) {
-        win.webContents.send('screenshot', imageBuffer); // Send buffer directly to React
-      }
-    } catch (error) {
-      return;
-    }
-  }, 300000); // Capture every 5 minutes
+  enableAutoLaunch();
 });
 
-// Quit the app when all windows are closed (except on macOS)
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
+ipcMain.handle('check-mandatory-update', async () => {
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    console.error('Update check failed, allowing session fallback:', error);
+    win.webContents.send('update-status', { available: false }); 
   }
 });
 
-async function captureScreen() {
-  const { width, height } = screen.getPrimaryDisplay().size; // Get actual screen resolution
+autoUpdater.on('update-available', () => {
+  win.webContents.send('update-status', { available: true });
 
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width: Math.floor(width * 0.5), height: Math.floor(height * 0.5) } // Reduce resolution
+  dialog.showMessageBox(win, {
+    type: 'warning',
+    title: 'Mandatory Update Required',
+    message: 'A newer version of Voctrum WorkHub is required to start your session. The app will now download the update.',
+    buttons: ['Download & Update']
+  }).then(() => {
+    autoUpdater.downloadUpdate();
   });
+});
 
-  if (sources.length === 0) return null;
-  const image = sources[0].thumbnail;
-  const resizedImage = image.resize({ width: Math.floor(width * 0.5), height: Math.floor(height * 0.5) }); // 50% smaller
+autoUpdater.on('update-downloaded', () => {
+  dialog.showMessageBox(win, {
+    type: 'info',
+    title: 'Install Update',
+    message: 'The download is complete. The app will restart now to apply changes.',
+    buttons: ['Restart Now']
+  }).then(() => {
+    autoUpdater.quitAndInstall();
+  });
+});
 
-  // Convert to high-quality JPEG format (85% quality)
-  return resizedImage.toJPEG(60); // Returns a Buffer, NOT Base64
-}
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
