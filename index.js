@@ -7,6 +7,8 @@ const { autoUpdater } = require('electron-updater');
 let win;
 autoUpdater.autoDownload = false;
 
+autoUpdater.forceDevUpdateConfig = true; 
+
 function createWindow() {
   win = new BrowserWindow({
     width: 800,
@@ -25,6 +27,10 @@ function createWindow() {
   win.webContents.setUserAgent(customUserAgent);
 
   win.loadURL('https://employees.voctrum.com');
+  win.webContents.on('did-finish-load', () => {
+    triggerUpdateCheck();
+  });
+
   win.on('closed', () => { win = null; });
 }
 
@@ -39,12 +45,17 @@ app.whenReady().then(() => {
   enableAutoLaunch();
 });
 
-ipcMain.handle('check-mandatory-update', async () => {
+async function triggerUpdateCheck() {
   try {
+    console.log('Pinging GitHub for update manifest...');
     await autoUpdater.checkForUpdates();
   } catch (error) {
     console.error('Update check failed, allowing session fallback:', error);
   }
+}
+
+ipcMain.handle('check-mandatory-update', async () => {
+  await triggerUpdateCheck();
 });
 
 autoUpdater.on('update-available', () => {
@@ -58,6 +69,14 @@ autoUpdater.on('update-available', () => {
   });
 });
 
+autoUpdater.on('update-not-available', () => {
+  console.log('App is fully up-to-date. Session cleared.');
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('AutoUpdater Error:', err);
+});
+
 autoUpdater.on('update-downloaded', () => {
   dialog.showMessageBox(win, {
     type: 'info',
@@ -65,7 +84,9 @@ autoUpdater.on('update-downloaded', () => {
     message: 'The download is complete. The app will restart now to apply changes.',
     buttons: ['Restart Now']
   }).then(() => {
-    autoUpdater.quitAndInstall();
+    setImmediate(() => {
+      autoUpdater.quitAndInstall();
+    });
   });
 });
 

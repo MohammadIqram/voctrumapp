@@ -6,6 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
+    "release": "dotenv -- npx electron-builder --publish always",
+    "dev:release": "dotenv -- npx electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "build": {
@@ -63,6 +65,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "electron": "^34.0.1",
     "electron-builder": "^25.1.8"
   },
